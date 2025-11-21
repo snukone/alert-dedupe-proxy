@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dedupe-proxy
+  namespace: monitoring
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: dedupe-proxy
+  template:
+    metadata:
+      labels:
+        app: dedupe-proxy
+    spec:
+      containers:
+      - name: dedupe-proxy
+        image: <YOUR_REGISTRY>/alert-dedupe-proxy:1.0.0
+        imagePullPolicy: IfNotPresent
+        env:
+          - name: PORT
+            value: "8080"
+          - name: DEDUP_TTL_SECONDS
+            valueFrom:
+              configMapKeyRef:
+                name: dedupe-proxy-cm
+                key: DEDUP_TTL_SECONDS
+          - name: FORWARD_TIMEOUT_MS
+            valueFrom:
+              configMapKeyRef:
+                name: dedupe-proxy-cm
+                key: FORWARD_TIMEOUT_MS
+          - name: MAX_CACHE_ENTRIES
+            valueFrom:
+              configMapKeyRef:
+                name: dedupe-proxy-cm
+                key: MAX_CACHE_ENTRIES
+          - name: TARGET_WEBHOOK_URL
+            valueFrom:
+              secretKeyRef:
+                name: dedupe-proxy-secret
+                key: TARGET_WEBHOOK_URL
+          - name: REDIS_URL
+            valueFrom:
+              secretKeyRef:
+                name: dedupe-proxy-secret
+                key: REDIS_URL
+        ports:
+          - name: http
+            containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dedupe-proxy
+  namespace: monitoring
+spec:
+  selector:
+    app: dedupe-proxy
+  ports:
+    - port: 80
+      targetPort: 8080

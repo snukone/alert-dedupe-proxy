@@ -1,0 +1,5 @@
+receivers:
+  - name: "to-rocketchat-with-dedupe"
+    webhookConfigs:
+      - url: "http://dedupe-proxy.monitoring.svc:80/webhook"
+        send_resolved: true
