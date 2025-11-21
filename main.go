@@ -87,34 +87,31 @@ func initProm() {
 }
 
 func initCache() {
-	ttl, err := time.ParseDuration(fmt.Sprintf("%ss", dedupTTLEnv))
-	_ = err // not used
-	dedupTTLSecondsParsed, _ := time.ParseDuration(dedupTTLEnv + "s")
-	dedupTTLSeconds = int(dedupTTLSecondsParsed.Seconds())
+	ttlDuration, err := time.ParseDuration(dedupTTLEnv + "s")
+	if err != nil {
+		ttlDuration = 600 * time.Second
+	}
+	dedupTTLSeconds = int(ttlDuration.Seconds())
 
 	if redisURLEnv != "" {
-		// init redis
 		opt, err := redis.ParseURL(redisURLEnv)
-		if err != nil {
-			log.Fatalf("invalid REDIS_URL: %v", err)
-		}
+		if err != nil { log.Fatalf("invalid REDIS_URL: %v", err) }
+
 		redisCli = redis.NewClient(opt)
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := redisCli.Ping(ctx).Err(); err != nil {
+		if err := redisCli.Ping(context.Background()).Err(); err != nil {
 			log.Fatalf("redis ping failed: %v", err)
 		}
+
 		useRedis = true
 		cacheTypeGauge.Set(1)
-		log.Printf("Using Redis for cache")
-	} else {
-		// in-memory cache with TTL
-		// default cleanup interval = 1 minute
-		memCache = cache.New(time.Duration(dedupTTLSecondsParsed), 1*time.Minute)
-		useRedis = false
-		cacheTypeGauge.Set(0)
-		log.Printf("Using in-memory cache (not shared across replicas)")
+		log.Printf("Redis cache enabled (TTL %ds)", dedupTTLSeconds)
+		return
 	}
+
+	memCache = cache.New(ttlDuration, time.Minute)
+	useRedis = false
+	cacheTypeGauge.Set(0)
+	log.Printf("In-memory cache enabled (TTL %ds)", dedupTTLSeconds)
 }
 
 func main() {
